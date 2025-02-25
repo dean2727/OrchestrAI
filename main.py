@@ -17,8 +17,7 @@ async def on_chat_start():
     await cl.Message(
         content="""
         Welcome to OrchestrAI! Please enter your composite query.\n\nFor example: 
-        'Send me bible scripture that will help me with how I want to grow from 
-        my latest journaling in Notion.'"
+        Send me bible scripture that will help me with how I want to grow from my latest journaling in Notion.
         """
     ).send()
 
@@ -30,12 +29,11 @@ async def main(message):
     if "query" not in job_config:
         job_config["query"] = message.content.strip()
 
-        ai_response = orchestrator.determine_agents(message.content)
-
-        agents = ai_response.agents
+        #ai_response = orchestrator.determine_agents(message.content)
+        #agents = ai_response.agents
+        agents = ["notionfetchagent", "scripturegenerationagent", "notificationagent"]
 
         ui_response = cl.Message("<do the agent stuff here>")
-        # ui_response = None
         # if len(agents) > 0:
         #     ui_response = cl.Message(content=f"Looks like we have some agents we'll use for this! {', '.join(agents)}")
         # else:
@@ -44,8 +42,8 @@ async def main(message):
 
         # TODO: render a dropdown for choosing frequency of the job, and a submit button
         # When submit is pressed, call initialize_agents then build_and_render_ai_job_workflow
-        # agents = orchestrator.initialize_agents(message.content, agents)
-        # orchestrator.build_and_render_ai_job_workflow(agents)
+        agents = orchestrator.initialize_agents(message.content, agents)
+        orchestrator.build_and_render_ai_job_workflow(agents, output_file_path="test.py")
 
     # else:
     #     #await cl.Message(message.content).send()

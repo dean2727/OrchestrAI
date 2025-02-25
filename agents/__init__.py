@@ -5,9 +5,9 @@ from .text_notification_agent import NotificationAgent
 
 # Each agent is instantiated and registered with a unique key.
 AGENT_REGISTRY = {
-    "notion_fetch": NotionFetchAgent,
-    "scripture_generation": ScriptureGenerationAgent,
-    "notification": NotificationAgent,
+    "notionfetchagent": NotionFetchAgent,
+    "scripturegenerationagent": ScriptureGenerationAgent,
+    "notificationagent": NotificationAgent,
 }
 
 AGENT_DESCRIPTIONS = {

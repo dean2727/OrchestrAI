@@ -1,6 +1,7 @@
 # agents/base_agent.py
 from abc import ABC, abstractmethod
 from typing import List, Dict
+from schemas.orchestrator_schema import AgentTemplateVarInstruction
 
 class BaseAgent(ABC):
     """
@@ -10,8 +11,19 @@ class BaseAgent(ABC):
     each agent is to be inserted into a workflow template that the cronjob will 
     then run off of.
     """
+
+    # These are template variables that inform prompt templates for the agent,
+    # mapping the variable to a set of instructions to the LLM on how to determine 
+    # the given template variable, for a give AI job/user query (it's prompting for prompts)
+    # (May be empty for some agents, like simple text notifications)
+    template_var_instructions = {}
+    # These are the LangGraph State attributes (mappings of strings to its respective 
+    # data type) this agent is responsible for setting after its node's execution in the graph
+    # (May be empty for some agents, like simple text notifications)
+    state_vars_set = {}
+
     def __init__(self):
-        self.ai_generated_template_vars: Dict[str, str] = {}
+        self.ai_generated_template_vars: List[AgentTemplateVarInstruction] = []
 
     @property
     def description(self) -> str:

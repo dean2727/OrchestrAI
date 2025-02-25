@@ -3,7 +3,8 @@ from agents.base_agent import BaseAgent
 import os
 from notion_client import Client
 from langchain.tools import tool
-from typing import List, Dict
+from typing import List
+from schemas.orchestrator_schema import AgentTemplateVarInstruction
 
 # Notion fetch function
 # TODO: figure out auth for this, if app will go into prod eventually
@@ -85,42 +86,44 @@ class NotionFetchAgent(BaseAgent):
 
     template_var_instructions = {
         "notion_data_action": """
-        This should be an action that will be taken on the user's Notion data. A 
-        general template is something like "Analyze the content from the user's 
-        Notion page and <desired_analysis>. Return a <output_format> that captures 
-        <goal>.". Some other examples:
+This should be an action that will be taken on the user's Notion data. A 
+general template is something like "Analyze the content from the user's 
+Notion page and <desired_analysis>. Return a <output_format> that captures 
+<goal>.". Some other examples:
 
-        1.	Summarization Task:
-        "Analyze the content from the user's Notion journal entry and summarize the primary ways the user desires personal growth. Return a concise paragraph that highlights their key motivations and intentions."
-        2.	Sentiment Analysis Task:
-        "Analyze the emotional tone of the user's journal entry and return a summary of the prevailing emotions expressed by the user."
-        3.	Keyword Extraction Task:
-        "Extract the most relevant keywords from the user's Notion journal entry that reflect core themes or focus areas."
-        4.	Action Item Identification:
-        "Analyze the user's journal entry and identify specific action items or goals the user mentioned."
+1.	Summarization Task:
+"Analyze the content from the user's Notion journal entry and summarize the primary ways the user desires personal growth. Return a concise paragraph that highlights their key motivations and intentions."
+2.	Sentiment Analysis Task:
+"Analyze the emotional tone of the user's journal entry and return a summary of the prevailing emotions expressed by the user."
+3.	Keyword Extraction Task:
+"Extract the most relevant keywords from the user's Notion journal entry that reflect core themes or focus areas."
+4.	Action Item Identification:
+"Analyze the user's journal entry and identify specific action items or goals the user mentioned."
         """,
 
         "notion_next_node_instructions": """
-        This should explain what to do with the output from the Notion data processing.
-        A general template is something like "Based on the <data_summary> from the 
-        user's journal entry, <desired_output_action> to <help_with_purpose>.". 
-        Some other examples:
+This should explain what to do with the output from the Notion data processing.
+A general template is something like "Based on the <data_summary> from the 
+user's journal entry, <desired_output_action> to <help_with_purpose>.". 
+Some other examples:
 
-        1.	Scripture Generation Task:
-        "Based on the summarized growth goals from the user's journal, provide a single Bible scripture that encourages and supports the user's desired personal growth."
-	    2.	Motivational Quote Retrieval:
-        "Using the extracted insights from the user's journal, find a motivational quote that aligns with the user's expressed goals or emotions."
-	    3.	Task Suggestion:
-        "Based on the journal's extracted action items, suggest one small, practical step the user can take to move forward."
-	    4.	Daily Reflection Prompt:
-        "Using the main themes from the journal summary, generate a reflective question the user can think about for personal growth."
+1.	Scripture Generation Task:
+"Based on the summarized growth goals from the user's journal, provide a single Bible scripture that encourages and supports the user's desired personal growth."
+2.	Motivational Quote Retrieval:
+"Using the extracted insights from the user's journal, find a motivational quote that aligns with the user's expressed goals or emotions."
+3.	Task Suggestion:
+"Based on the journal's extracted action items, suggest one small, practical step the user can take to move forward."
+4.	Daily Reflection Prompt:
+"Using the main themes from the journal summary, generate a reflective question the user can think about for personal growth."
         """
     }
 
-    def __init__(self, ai_generated_template_vars: Dict[str, str], step: int, precedes_generation_agent: bool):
+    state_vars_set = {"notion_journal_growth_summary": str}
+
+    def __init__(self, ai_generated_template_vars: List[AgentTemplateVarInstruction], 
+                 step: int):
         self.ai_generated_template_vars = ai_generated_template_vars
         self.step = step
-        self.precedes_generation_agent = precedes_generation_agent # Since this is true, we define a method to get (in generation agent)
 
     @property
     def description(self) -> str:
@@ -128,29 +131,24 @@ class NotionFetchAgent(BaseAgent):
 
     def get_graph_node_code(self):
         code = """
-        notion_prompt_template = PromptTemplate(
-            input_variables=["notion_data_action"],
-            template="You are an assistant responsible for simply making a call to the notion client API, and then doing the following instructions on the returned data: {notion_data_action}"
-        )
-        tools = [fetch_latest_notion_journaling_entry]
-        notion_agent = initialize_agent(
-            tools=tools,
-            llm=llm,
-            handle_parsing_errors=True
-        )
-        def notion_node(state: State) -> State:
-            notion_data_action = state.get("notion_data_action")
-            prompt = notion_prompt_template.format(notion_data_action=notion_data_action)
-            result = notion_agent.invoke(prompt)
-            return {"notion_journal_growth_summary": result.get('output')}
+tools = [fetch_latest_notion_journaling_entry]
+notion_agent = initialize_agent(
+    tools=tools,
+    llm=llm,
+    handle_parsing_errors=True
+)
+def notion_node(state: State) -> State:
+    prompt = "You are an assistant responsible for simply making a call to the notion client API, and then doing the following instructions on the returned data: {notion_data_action}"
+    result = notion_agent.invoke(prompt)
+    return {"notion_journal_growth_summary": result.get('output')}
         """
         return code
 
     def get_post_generation_agent_code(self):
         build_prompt_py_code = """
-        notion_journal_growth_summary = state.get("notion_journal_growth_summary")
-        notion_next_node_instructions = state.get("notion_next_node_instructions") + notion_journal_growth_summary
-        prompt = generation_agent_prompt_template.format(instructions=notion_next_node_instructions)
+notion_journal_growth_summary = state.get("notion_journal_growth_summary")
+notion_next_node_instructions = state.get("notion_next_node_instructions") + notion_journal_growth_summary
+prompt = generation_agent_prompt_template.format(instructions=notion_next_node_instructions)
         """
 
         return build_prompt_py_code

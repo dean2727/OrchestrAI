@@ -1,11 +1,9 @@
 from agents import *
-from langgraph import Graph
-from typing import List, Optional, Dict
 from jinja2 import Template
-from pydantic import BaseModel
 from openai import OpenAI
 import os
 from agents import AGENT_DESCRIPTIONS, AGENT_REGISTRY
+from schemas.orchestrator_schema import *
 
 # String template (langgraph python script) which each AI cronjob will be based off of
 workflow_template = """
@@ -47,13 +45,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Graph-level error: {e}") 
 """
-
-class OrchestratorOutputFormat(BaseModel):
-    message: str
-    agents: Optional[List[str]]
-
-class AgentTemplateVarInstructionsOutputFormat(BaseModel):
-    ai_generated_template_vars = Dict[str, str]
 
 class Orchestrator:
     instructions_to_get_job_agents = """
@@ -138,34 +129,40 @@ class Orchestrator:
 
         return response
     
-    def _determine_agent_template_values(self, orig_user_query: str, agent_description: str, template_var_instructions: Dict[str, str]) -> Dict[str, str]:
+    def _determine_agent_template_values(
+            self, orig_user_query: str, 
+            agent_description: str, 
+            template_var_instructions: Dict[str, str]
+        ) -> List[AgentTemplateVarInstruction]:
         template_var_instructions_str = "".join([f"{var_name}: \n{var_instructions}\n\n" for var_name, var_instructions in template_var_instructions.items()])
 
         prompt = f"""
-        Your job is to give me back what each of the following variables would be, 
-        given the agent description and user query.
+Your job is to give me back what each of the following variables would be, 
+given the agent description and user query. Make sure to back a response 
+that is in JSON/dictionary format, where keys are variables and values are 
+the values you determine for them.
 
-        Agent description: {agent_description}
+Agent description: {agent_description}
 
-        User query: {orig_user_query}
+User query: {orig_user_query}
 
-        Variables:
-        {template_var_instructions_str}
+Variables:
+{template_var_instructions_str}
         """
-        
+
         # Send all var_instructions into single prompt, call AI
         # Have the output conform to pydantic structure with {<key from var_instructions>: <prompt>}
         # This will be sent when initializing the agent
         try:
             chat_completion = self.orchestrator.beta.chat.completions.parse(
                 model=self.non_reasoning_model,
-                messages=[{"role": "user", "content": prompt,}],
+                messages=[{"role": "user", "content": prompt}],
                 response_format=AgentTemplateVarInstructionsOutputFormat
             )
 
             response = chat_completion.choices[0].message.parsed
-            template_vals = response.ai_generated_template_vars
-            return template_vals
+            template_vars = response.ai_generated_template_vars
+            return template_vars
         except Exception as e:
             print(f"Error determining agent template variables: {e}")
 
@@ -184,34 +181,33 @@ class Orchestrator:
             name = agent_names[i]
             agent_template_var_instructions = AGENT_REGISTRY[name].template_var_instructions
 
+            # If we need to get the prompt instructions for this agent
             if agent_template_var_instructions:
                 # If its a generation agent, then, instructions are supplied
                 # Otherwise, the instructions depend on the node that came before it,
                 # ie the state attributes that were set by this node
                 # (prompt is set by this, via build_prompt_py_code template variable)
                 # TODO: do we want to set some attribute on the class indicating whether
-                # this is agent is in the "vanilla generation" category? Or, do we 
+                # this agent is in the "vanilla generation" category? Or, do we 
                 # want to just have some high level 4o agent?
-                if name == "scripturegenerationagent" and i == 0: ## TODO: need to see if i == 0 is the only case for this
+                if "build_prompt_py_code" in agent_template_var_instructions:
+                    if name == "scripturegenerationagent" and i == 0: # TODO: need to see if i == 0 is the only case for this
+                        agent_template_values = self._determine_agent_template_values(
+                            orig_user_query, AGENT_DESCRIPTIONS[name], agent_template_var_instructions)
+                        agent_template_values = {
+                            "build_prompt_py_code": f"prompt = generation_agent_prompt_template.format(instructions={agent_template_values['instructions']})"
+                        }
+                    else:
+                        agent_template_values = {
+                            "build_prompt_py_code": prev_agent.get_post_generation_agent_code()
+                        }
+                else:
                     agent_template_values = self._determine_agent_template_values(
                         orig_user_query, AGENT_DESCRIPTIONS[name], agent_template_var_instructions)
-                    agent_template_values = {
-                        "build_prompt_py_code": f"prompt = generation_agent_prompt_template.format(instructions={agent_template_values["instructions"]})"
-                    }
-                else:
-                    agent_template_values = {
-                        "build_prompt_py_code": prev_agent.get_post_generation_agent_code()
-                    }
             else:
                 agent_template_values = {}
             
-            # Is next agent generation agent?
-            if i < len(agent_names)-1 and agent_names[i+1] == "scripturegenerationagent":
-                precedes_generation_agent = True
-            else:
-                precedes_generation_agent = False
-
-            agent = AGENT_REGISTRY[name](agent_template_values, i, precedes_generation_agent)
+            agent = AGENT_REGISTRY[name](agent_template_values, i)
             agents.append(agent)
 
             prev_agent = agent
@@ -226,27 +222,41 @@ class Orchestrator:
         """
         template = Template(workflow_template)
 
-        # TODO: state
-        graph_state = ...
+        graph_state = "class State(TypedDict):\n" + "\n".join(
+            f'"{key}": {value_type.__name__}'
+            for agent in agents
+            for key, value_type in agent.state_vars_set.items()
+        )
 
         node_code_blocks = []
         nodes = []
         for agent in agents:
             code_block = agent.get_graph_node_code()
-            # Inject template variables for this code block (TODO)
+
+            print("DEBUG: code block is:")
+            print(code_block)
+
+            # Inject template variables (AI-generated prompt instructions) for this code block
+            for tvar in agent.ai_generated_template_vars:
+                tvar_name, tvar_instruction = tvar.template_var_name, tvar.template_var_instruction
+
+                # Cant do string .format() because { } are part of python's official syntax
+                code_block = code_block.replace("{"+tvar_name+"}", tvar_instruction)
+
             node_code_blocks.append(code_block)
             nodes.append(f"graph.add_node(\"{agent.node_name}\", {agent.node_name})")
 
         edges = []
-        for i in range(len(agents - 1)):
+        for i in range(len(agents) - 1):
             agent, agent_after = agents[i], agents[i+1]
             edges.append(f"graph.add_edge(\"{agent.node_name}\", \"{agent_after.node_name}\")")
 
         # Last edge, connects to END
         edges.append(f"graph.add_edge(\"{agents[-1].node_name}\", END)")
 
-        # TODO: initial state
-        initial_state = ...
+        # Everything should be injected in or is set post-graph-node execution,
+        # so initial graph state can be {}
+        initial_state = {}
 
         rendered_script = template.render(
             STATE=graph_state,

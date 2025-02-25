@@ -35,6 +35,8 @@ notion_agent = initialize_agent(
     handle_parsing_errors=True
 )
 def notion_node(state: State) -> State:
+    # These 2 lines wouldnt be needed in agent class code, since orchestrator injects notion_data_action into the entire code block string
+    # Hence, we can just define the notion_prompt_template here as a string
     notion_data_action = state.get("notion_data_action")
     prompt = notion_prompt_template.format(notion_data_action=notion_data_action)
     result = notion_agent.invoke(prompt)
