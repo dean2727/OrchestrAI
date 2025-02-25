@@ -1,0 +1,9 @@
+chainlit
+twilio
+kubernetes
+openai
+langchain
+langchain-openai
+langchain-community
+langgraph
+notion-client

@@ -1,0 +1,7 @@
+twilio
+openai
+langchain
+langchain-openai
+langchain-community
+langgraph
+notion-client
