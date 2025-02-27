@@ -12,3 +12,6 @@ watch:
 clean:
 	kubectl delete cronjob --all
 	kubectl delete jobs --all
+
+run:
+	chainlit run main.py

@@ -9,8 +9,8 @@ from langchain.agents import initialize_agent
 
 # Agent-dependent imports
 from twilio.rest import Client as TwilioClient
-from agents.notion_fetch_agent import fetch_latest_notion_journaling_entry
-from agents.text_notification_agent import text_user
+from tools.notion_fetch_agent_tools import fetch_latest_notion_journaling_entry
+from tools.text_notification_agent_tools import text_user
 
 # Initialize clients (replace with your actual credentials)
 #notion = Client(auth="your_notion_api_key")

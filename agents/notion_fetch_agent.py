@@ -1,73 +1,8 @@
 # agents/notion_fetch_agent.py
 from agents.base_agent import BaseAgent
 import os
-from notion_client import Client
-from langchain.tools import tool
 from typing import List
 from schemas.orchestrator_schema import AgentTemplateVarInstruction
-
-# Notion fetch function
-# TODO: figure out auth for this, if app will go into prod eventually
-@tool
-def fetch_latest_notion_journaling_entry(dummy_input: str = "") -> str:
-    """Fetch the latest journaling entry (page) from a Notion database (pass in a random string)."""
-
-    # TODO: Extract this out later
-    # This is my hardcoded database ID for 
-    notion_db_id = "9dd35093a917436f9de6aa56b28c6182"
-    notion = Client(auth=os.environ["NOTION_BEARER_TOKEN"])
-    response = notion.databases.query(
-        database_id=notion_db_id,
-        sorts=[
-            {
-                "timestamp": "created_time",
-                "direction": "descending"
-            }
-        ],
-        page_size=1  # Limit to the most recent entry
-    )
-
-    def get_page_content(page_id):
-        blocks = notion.blocks.children.list(block_id=page_id)
-        content = []
-        for block in blocks["results"]:
-            block_type = block["type"]
-            if block_type == "paragraph" and block["paragraph"]["rich_text"]:
-                text = "".join([t["plain_text"] for t in block["paragraph"]["rich_text"]])
-                content.append(f"Paragraph: {text}")
-            elif block_type == "heading_1" and block["heading_1"]["rich_text"]:
-                text = "".join([t["plain_text"] for t in block["heading_1"]["rich_text"]])
-                content.append(f"Heading 1: {text}")
-            elif block_type == "heading_2" and block["heading_2"]["rich_text"]:
-                text = "".join([t["plain_text"] for t in block["heading_2"]["rich_text"]])
-                content.append(f"Heading 2: {text}")
-            # Add more block types as needed (e.g., "image", "to_do", etc.)
-        return content
-
-    # Process and display the results
-    results = response["results"]
-    output_string = ""
-    for i, page in enumerate(results, 1):
-        # Get the title (adjust based on your database's property name)
-        title = page["properties"].get("Name", {}).get("title", [{}])[0].get("plain_text", "No title")
-        created_time = page["created_time"]
-        page_id = page["id"]
-        
-        # Fetch the page content
-        content = get_page_content(page_id)
-        
-        # Add the page details and content to the output string
-        output_string += f"{i}. Title: {title}, Created: {created_time}\n"
-        if content:
-            output_string += "   Content:\n"
-            for line in content:
-                output_string += f"      {line}\n"
-        else:
-            output_string += "   No content blocks found.\n"
-        output_string += "\n"
-
-    return output_string
-
 
 class NotionFetchAgent(BaseAgent):
     """
@@ -120,35 +55,50 @@ Some other examples:
 
     state_vars_set = {"notion_journal_growth_summary": str}
 
+    tool_code_import_mappings = {
+        "fetch_latest_notion_journaling_entry": "from tools.notion_fetch_agent_tools import fetch_latest_notion_journaling_entry"
+    }
+
     def __init__(self, ai_generated_template_vars: List[AgentTemplateVarInstruction], 
-                 step: int):
+                 step: int, tools_to_use: List[str] = ["fetch_latest_notion_journaling_entry"]):
         self.ai_generated_template_vars = ai_generated_template_vars
         self.step = step
+        self.tools_to_use = tools_to_use
 
     @property
     def description(self) -> str:
         return "This agent works with retrieved user Notion data (journal data for now)."
 
+    # TODO: need to implement a mechanism for the orchestrator to only get template vars
+    # for a determined agent, but also the tools it will have access to
+    # tools can all be mounted in the cronjob and imported into this code as needed
     def get_graph_node_code(self):
-        code = """
-tools = [fetch_latest_notion_journaling_entry]
+        tools_code_str = "\n".join(self.tool_code_import_mappings[x] for x in self.tools_to_use)
+        tools_code_str += f"\ntools = [{', '.join(self.tools_to_use)}]"
+
+        code = "llm = ChatOpenAI(model=\"gpt-4o\")" + "\n" + tools_code_str + """
 notion_agent = initialize_agent(
     tools=tools,
     llm=llm,
     handle_parsing_errors=True
 )
-def notion_node(state: State) -> State:
+def notionfetchagent(state: State) -> State:
     prompt = "You are an assistant responsible for simply making a call to the notion client API, and then doing the following instructions on the returned data: {notion_data_action}"
     result = notion_agent.invoke(prompt)
-    return {"notion_journal_growth_summary": result.get('output')}
-        """
+    return {"notion_journal_growth_summary": result.get('output')}"""
         return code
 
+    # TODO: this also depends on what tools are used/what function this agent would 
+    # serve in the job. This needs to be dynamically determined somehow (perhaps 
+    # with if-else is easiest)
     def get_post_generation_agent_code(self):
-        build_prompt_py_code = """
-notion_journal_growth_summary = state.get("notion_journal_growth_summary")
-notion_next_node_instructions = state.get("notion_next_node_instructions") + notion_journal_growth_summary
-prompt = generation_agent_prompt_template.format(instructions=notion_next_node_instructions)
-        """
+        if "fetch_latest_notion_journaling_entry" in self.tools_to_use:
+            build_prompt_py_code = """
+    notion_journal_growth_summary = state.get("notion_journal_growth_summary")
+    notion_next_node_instructions = state.get("notion_next_node_instructions") + notion_journal_growth_summary
+    prompt = generation_agent_prompt_template.format(instructions=notion_next_node_instructions)
+            """
+        else:
+            build_prompt_py_code = "..."
 
         return build_prompt_py_code

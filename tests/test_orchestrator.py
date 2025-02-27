@@ -50,8 +50,6 @@ If you see no ordered list and instead some message that the agent pool does
 not have all necessary agents, just return back this same message.
 """
 
-#print("DEBUG: ", orchestrator_agent_instructions, type(OrchestratorOutputFormat))
-
 orchestrator = OpenAI(
     api_key=os.environ.get("OPENAI_API_KEY"),  # This is the default and can be omitted
 )

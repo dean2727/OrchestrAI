@@ -17,6 +17,8 @@ from langchain.agents import initialize_agent
 
 {{ STATE }}
 
+graph = StateGraph(State)
+
 {% for code_block in NODE_CODE_BLOCKS %}
 {{ code_block }}
 {% endfor %}
@@ -29,16 +31,10 @@ from langchain.agents import initialize_agent
 {{ edge }}
 {% endfor %}
 
-graph = StateGraph(State)
-
-...
-
 compiled_graph = graph.compile()
 
 if __name__ == "__main__":
-    initial_state = {
-        {{ INITIAL_STATE }}
-    }
+    initial_state = {{ INITIAL_STATE }}
     try:
         result = compiled_graph.invoke(initial_state)
         print("Graph execution successful! Response: ", result)
@@ -198,14 +194,15 @@ Variables:
                             "build_prompt_py_code": f"prompt = generation_agent_prompt_template.format(instructions={agent_template_values['instructions']})"
                         }
                     else:
-                        agent_template_values = {
-                            "build_prompt_py_code": prev_agent.get_post_generation_agent_code()
-                        }
+                        agent_template_values = [AgentTemplateVarInstruction(
+                            template_var_name="build_prompt_py_code",
+                            template_var_instruction=prev_agent.get_post_generation_agent_code()
+                        )]
                 else:
                     agent_template_values = self._determine_agent_template_values(
                         orig_user_query, AGENT_DESCRIPTIONS[name], agent_template_var_instructions)
             else:
-                agent_template_values = {}
+                agent_template_values = []
             
             agent = AGENT_REGISTRY[name](agent_template_values, i)
             agents.append(agent)
@@ -223,7 +220,7 @@ Variables:
         template = Template(workflow_template)
 
         graph_state = "class State(TypedDict):\n" + "\n".join(
-            f'"{key}": {value_type.__name__}'
+            f"    {key}: {value_type.__name__}"
             for agent in agents
             for key, value_type in agent.state_vars_set.items()
         )
@@ -232,9 +229,6 @@ Variables:
         nodes = []
         for agent in agents:
             code_block = agent.get_graph_node_code()
-
-            print("DEBUG: code block is:")
-            print(code_block)
 
             # Inject template variables (AI-generated prompt instructions) for this code block
             for tvar in agent.ai_generated_template_vars:
