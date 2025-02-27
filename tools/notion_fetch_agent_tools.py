@@ -11,6 +11,7 @@ def fetch_latest_notion_journaling_entry(dummy_input: str = "") -> str:
     # TODO: Extract this out later
     # This is my hardcoded database ID for 
     notion_db_id = "9dd35093a917436f9de6aa56b28c6182"
+    # notion_db_id = os.environ["NOTION_DB_ID"]
     notion = Client(auth=os.environ["NOTION_BEARER_TOKEN"])
     response = notion.databases.query(
         database_id=notion_db_id,

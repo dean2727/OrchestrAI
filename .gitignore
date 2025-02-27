@@ -1,3 +1,5 @@
 .env
 __pycache__/
 .chainlit/
+test.py
+x.py

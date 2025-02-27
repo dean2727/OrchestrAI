@@ -4,6 +4,8 @@ from openai import OpenAI
 import os
 from agents import AGENT_DESCRIPTIONS, AGENT_REGISTRY
 from schemas.orchestrator_schema import *
+from kubernetes import client
+from typing import List, Any, Dict
 
 # String template (langgraph python script) which each AI cronjob will be based off of
 workflow_template = """
@@ -261,3 +263,10 @@ Variables:
         )
         with open(output_file_path, "w") as f:
             f.write(rendered_script)
+
+    def submit_cronjob(self, namespace: str, cronjob_manifest: Dict[str, Any]):
+        batch_v1 = client.BatchV1Api()
+        response = batch_v1.create_namespaced_cron_job(
+            namespace=namespace,
+            body=cronjob_manifest
+        )
