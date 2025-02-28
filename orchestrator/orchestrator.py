@@ -14,7 +14,7 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from typing import TypedDict
 import os
-from langgraph.graph import END, StateGraph
+from langgraph.graph import START, END, StateGraph
 from langchain.agents import initialize_agent
 
 {{ STATE }}
@@ -243,10 +243,11 @@ Variables:
             nodes.append(f"graph.add_node(\"{agent.node_name}\", {agent.node_name})")
 
         edges = []
+        # First edge, connects START to node
+        edges.append(f"graph.add_edge(START, \"{agents[0].node_name}\")")
         for i in range(len(agents) - 1):
             agent, agent_after = agents[i], agents[i+1]
             edges.append(f"graph.add_edge(\"{agent.node_name}\", \"{agent_after.node_name}\")")
-
         # Last edge, connects to END
         edges.append(f"graph.add_edge(\"{agents[-1].node_name}\", END)")
 

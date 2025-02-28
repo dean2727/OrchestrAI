@@ -1,6 +1,8 @@
 from kubernetes import client, config
 import os
 
+config.load_kube_config()
+
 cron_schedule = "* * * * *"
 job_id = f"job-abc-xyz"
 username = "dean"
@@ -10,7 +12,7 @@ s3_path = f"s3_storage/{username}"
 job_file_name = "job1.py"
 template_save_path = f"{home_abs_path}/{s3_path}/{job_file_name}"
 tools_path = f"{home_abs_path}/tools/"
-image = "ai-job:latest"
+image = "dean27/orchestrai:latest"
 user_notion_db_id = "9dd35093a917436f9de6aa56b28c6182"
 
 cronjob_manifest = {
@@ -42,10 +44,13 @@ cronjob_manifest = {
                                 "volumeMounts": [
                                     {
                                         "name": "ai-job-template",
-                                        "mountPath": "graph.py"
+                                        "mountPath": "/scripts/graph.py"
                                     }
                                 ]
                             }
+                        ],
+                        "imagePullSecrets": [
+                            {"name": "dockerhub-secret"}
                         ],
                         "restartPolicy": "OnFailure",
                         "volumes": [

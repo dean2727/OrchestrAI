@@ -1,6 +1,5 @@
 import chainlit as cl
 from kubernetes import config
-from kubernetes_cronjob_manager import create_cronjob
 from openai import OpenAI
 from orchestrator.orchestrator import Orchestrator
 from chainlit.input_widget import Select, TextInput
@@ -23,6 +22,14 @@ def validate_time(time_str: str) -> bool:
         return True
     except ValueError:
         return False
+
+def validate_phone_number(phone_number: str) -> bool:
+    phone_pattern = re.compile(r'^\+\d{1,3}\d{3,14}$')
+    return bool(phone_pattern.match(phone_number))
+
+def validate_email(email: str) -> bool:
+    email_pattern = re.compile(r'^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$')
+    return bool(email_pattern.match(email))
 
 # Global configuration storage for the current job
 job_config = {}
@@ -56,18 +63,25 @@ async def on_chat_start():
         ),
         TextInput(id="StartDate", label="AI Job Start Date (YYYY-MM-DD)", initial="2025-02-27"),
         TextInput(id="StartTime", label="AI Job Start Time (HH:MM)", initial="00:00"),
-        TextInput(id="NotionDBID", label="Notion Database ID ()", initial="123")
+        TextInput(id="NotionDBID", label="Notion Database ID", initial="123"),
+        TextInput(id="PhoneNumber", label="Phone Number (E.164 Format)", initial="+1234567890"),
+        TextInput(id="Email", label="Email Address", initial="example@example.com")
     ]).send()
     
     frequency = settings["Model"]
     start_date = settings["StartDate"]
     start_time = settings["StartTime"]
+    notion_db_id = settings["NotionDBID"]
+    phone_number = settings["PhoneNumber"]
+    email = settings["Email"]
 
     # Store validated settings in user session
     cl.user_session.set("frequency", frequency)
     cl.user_session.set("start_date", start_date)
     cl.user_session.set("start_time", start_time)
-    cl.user_session.set("notion_db_id", "123")
+    cl.user_session.set("notion_db_id", notion_db_id)
+    cl.user_session.set("phone_number", phone_number)
+    cl.user_session.set("email", email)
 
 @cl.on_settings_update
 async def on_settings_update(settings):
@@ -76,6 +90,8 @@ async def on_settings_update(settings):
     start_date = settings["StartDate"]
     start_time = settings["StartTime"]
     notion_db_id = settings["NotionDBID"]
+    phone_number = settings["PhoneNumber"]
+    email = settings["Email"]
 
     # Validate StartDate
     if not validate_date(start_date):
@@ -87,12 +103,24 @@ async def on_settings_update(settings):
         await cl.Message(content="Invalid Start Time format. Expected HH:MM. Keeping previous value.").send()
         start_time = cl.user_session.get("start_time", "00:00")  # Fallback to previous or default
 
+    # Validate PhoneNumber
+    if not validate_phone_number(phone_number):
+        await cl.Message(content="Invalid Phone Number format. Expected E.164 Format. Keeping previous value.").send()
+        phone_number = cl.user_session.get("phone_number", "+1234567890")  # Fallback to previous or default
+
+    # Validate Email
+    if not validate_email(email):
+        await cl.Message(content="Invalid Email format. Keeping previous value.").send()
+        email = cl.user_session.get("email", "example@example.com")  # Fallback to previous or default
+
     # Update validated settings in user session
     cl.user_session.set("frequency", frequency)
     cl.user_session.set("start_date", start_date)
     cl.user_session.set("start_time", start_time)
     cl.user_session.set("notion_db_id", notion_db_id)
-    await cl.Message(content=f"Settings updated: Frequency={frequency}, Start Date={start_date}, Start Time={start_time}").send()
+    cl.user_session.set("phone_number", phone_number)
+    cl.user_session.set("email", email)
+    await cl.Message(content=f"Settings updated: Frequency={frequency}, Start Date={start_date}, Start Time={start_time}, Phone Number={phone_number}, Email={email}").send()
 
 @cl.on_message
 async def main(message):
@@ -103,6 +131,8 @@ async def main(message):
     start_date = cl.user_session.get("start_date", "2025-02-27")
     start_time = cl.user_session.get("start_time", "00:00")
     notion_db_id = cl.user_session.get("notion_db_id", "")
+    phone_number = cl.user_session.get("phone_number", "+1234567890")
+    email = cl.user_session.get("email", "example@example.com")
 
     # Validate and combine start date and time
     try:
@@ -178,6 +208,8 @@ async def main(message):
                                             {"name": "NOTION_DB_ID", "value": notion_db_id },
                                             {"name": "NOTION_BEARER_TOKEN", "value": os.environ["NOTION_BEARER_TOKEN"]},
                                             {"name": "OPENAI_API_KEY", "value": os.environ["OPENAI_API_KEY"]},
+                                            {"name": "USER_PHONE_NUMBER", "value": phone_number},
+                                            {"name": "USER_EMAIL", "value": email},
                                         ],
                                         "volumeMounts": [
                                             {

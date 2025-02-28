@@ -1,5 +1,4 @@
 import chainlit as cl
-from kubernetes_cronjob_manager import create_cronjob
 from openai import OpenAI
 import os
 from pydantic import RootModel, BaseModel

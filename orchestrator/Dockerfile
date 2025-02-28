@@ -6,6 +6,6 @@ WORKDIR /scripts
 COPY orchestrator/requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-COPY tools/ .
+COPY tools/ /scripts/tools/
 
 CMD ["python", "graph.py"]
