@@ -8,9 +8,7 @@ from notion_client import Client
 def fetch_latest_notion_journaling_entry(dummy_input: str = "") -> str:
     """Fetch the latest journaling entry (page) from a Notion database (pass in a random string)."""
 
-    # TODO: Extract this out later
-    # This is my hardcoded database ID for 
-    notion_db_id = "9dd35093a917436f9de6aa56b28c6182"
+    notion_db_id = os.environ["NOTION_DB_ID"]
     # notion_db_id = os.environ["NOTION_DB_ID"]
     notion = Client(auth=os.environ["NOTION_BEARER_TOKEN"])
     response = notion.databases.query(

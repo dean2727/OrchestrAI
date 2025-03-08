@@ -40,6 +40,8 @@ cronjob_manifest = {
                                     {"name": "NOTION_DB_ID", "value": user_notion_db_id},
                                     {"name": "NOTION_BEARER_TOKEN", "value": os.environ["NOTION_BEARER_TOKEN"]},
                                     {"name": "OPENAI_API_KEY", "value": os.environ["OPENAI_API_KEY"]},
+                                    {"name": "USER_PHONE_NUMBER", "value": os.environ["USER_PHONE_NUMBER"]},
+                                    {"name": "USER_EMAIL", "value": os.environ["USER_EMAIL"]},
                                 ],
                                 "volumeMounts": [
                                     {

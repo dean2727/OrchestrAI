@@ -88,17 +88,14 @@ class Orchestrator:
         in the pool to fulfill the (recurring) AI job request that underlies the 
         user's request
         """
-        agent_descriptions = "\n".join(
-            [f"{name}: {agent.description}" for name, agent in AGENT_DESCRIPTIONS.items()]
-        )
         try:
             chat_completion = self.orchestrator.beta.chat.completions.parse(
                 model=self.reasoning_model,
                 messages=[
                     {
                         "role": "user",
-                        "content": self.orchestrator_instructions_get_job_agents.format(
-                            agent_descriptions=agent_descriptions, query=msg
+                        "content": self.instructions_to_get_job_agents.format(
+                            agent_descriptions=AGENT_DESCRIPTIONS, query=msg
                         ),
                     }
                 ],
@@ -114,7 +111,7 @@ class Orchestrator:
                 messages=[
                     {
                         "role": "user",
-                        "content": self.orchestrator_instructions_format_job_agents \
+                        "content": self.instructions_to_format_job_agents \
                         .format(message=chat_completion),
                     }
                 ],
@@ -122,10 +119,10 @@ class Orchestrator:
             )
 
             response = chat_completion2.choices[0].message.parsed
+            return response
         except Exception as e:
             print(f"Error formatting agents (call 2): {e}")
 
-        return response
     
     def _determine_agent_template_values(
             self, orig_user_query: str, 

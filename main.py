@@ -40,7 +40,7 @@ orchestrator = Orchestrator()
 # cronjob vars
 home_abs_path = os.path.abspath('.')
 tools_path = f"{home_abs_path}/tools/"
-image = "ai-job:latest"
+image = "dean27/orchestrai:latest"
 namespace = "default"
 
 @cl.on_chat_start
@@ -51,21 +51,19 @@ async def on_chat_start():
         Send me bible scripture that will help me with how I want to grow from my latest journaling in Notion.
         """
     ).send()
-    # TODO: implement better design of scheduling jobs (start date, every x day/
-    # week/hour, at a certain time)
     settings = await cl.ChatSettings(
     [
         Select(
             id="Model",
             label="AI Job Frequency",
             values=["Manual", "Every minute", "Every hour", "Every day", "Every week"],
-            initial_index=0,
+            initial_index=1,
         ),
-        TextInput(id="StartDate", label="AI Job Start Date (YYYY-MM-DD)", initial="2025-02-27"),
-        TextInput(id="StartTime", label="AI Job Start Time (HH:MM)", initial="00:00"),
-        TextInput(id="NotionDBID", label="Notion Database ID", initial="123"),
-        TextInput(id="PhoneNumber", label="Phone Number (E.164 Format)", initial="+1234567890"),
-        TextInput(id="Email", label="Email Address", initial="example@example.com")
+        TextInput(id="StartDate", label="AI Job Start Date (YYYY-MM-DD)", initial=datetime.now().strftime("%Y-%m-%d")),
+        TextInput(id="StartTime", label="AI Job Start Time (HH:MM)", initial=datetime.now().strftime("%H:%M")),
+        TextInput(id="NotionDBID", label="Notion Database ID (https://www.notion.so/myworkspace/<ID HERE>)", initial="9dd35093a917436f9de6aa56b28c6182"),
+        TextInput(id="PhoneNumber", label="Phone Number (E.164 Format)", initial="+13045492645"),
+        TextInput(id="Email", label="Email Address", initial="dto3576@gmail.com")
     ]).send()
     
     frequency = settings["Model"]
@@ -152,8 +150,6 @@ async def main(message):
 
     cron_schedule = frequency_map.get(frequency)
 
-    job_id = f"job-{cl.context.session_id}-{hash(message.content)}"
-
     # TODO: get dynamically
     username = "dean"
     s3_path = f"s3_storage/{username}/"
@@ -165,6 +161,7 @@ async def main(message):
     new_number = max(job_numbers, default=0) + 1
     job_file_name = f"job{new_number}.py"
     template_save_path = f"{home_abs_path}/{s3_path}/{job_file_name}"
+    job_id = f"job-{new_number}-{username}"
 
     async def local_job_function():
         result = f"Processed query: '{message.content}' with frequency: {frequency}"
@@ -174,14 +171,17 @@ async def main(message):
         job_config["query"] = message.content.strip()
 
         # Determine the agents
-        #ai_response = orchestrator.determine_agents(message.content)
-        #agents = ai_response.agents
-        agents = ["notionfetchagent", "scripturegenerationagent", "notificationagent"]
+        ai_response = orchestrator.determine_agents(message.content)
+        print("DEBUG:", ai_response)
+        agents = ai_response.agents
+        #agents = ["notionfetchagent", "scripturegenerationagent", "notificationagent"]
+
+        await cl.Message(content=f"Going to use these agents: {agents}").send()
 
         # Initialize agents (determine template vars)
-        #agents = orchestrator.initialize_agents(message.content, agents)
+        agents = orchestrator.initialize_agents(message.content, agents)
         # Render the workflow (python file)
-        #orchestrator.build_and_render_ai_job_workflow(agents, output_file_path=job_file_name)
+        orchestrator.build_and_render_ai_job_workflow(agents, output_file_path=template_save_path)
 
         cronjob_manifest = {
             "apiVersion": "batch/v1",
@@ -214,7 +214,7 @@ async def main(message):
                                         "volumeMounts": [
                                             {
                                                 "name": "ai-job-template",
-                                                "mountPath": "graph.py"
+                                                "mountPath": "/scripts/graph.py"
                                             }
                                         ]
                                     }
@@ -238,4 +238,4 @@ async def main(message):
 
         orchestrator.submit_cronjob(namespace, cronjob_manifest)
 
-        await cl.Message("Job submitted!").send()
+        await local_job_function()
