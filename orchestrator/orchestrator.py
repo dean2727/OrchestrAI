@@ -125,8 +125,7 @@ class Orchestrator:
 
     
     def _determine_agent_template_values(
-            self, orig_user_query: str, 
-            agent_description: str, 
+            self, orig_user_query: str, agent_description: str, 
             template_var_instructions: Dict[str, str]
         ) -> List[AgentTemplateVarInstruction]:
         template_var_instructions_str = "".join([f"{var_name}: \n{var_instructions}\n\n" for var_name, var_instructions in template_var_instructions.items()])
@@ -186,7 +185,7 @@ Variables:
                 # this agent is in the "vanilla generation" category? Or, do we 
                 # want to just have some high level 4o agent?
                 if "build_prompt_py_code" in agent_template_var_instructions:
-                    if name == "scripturegenerationagent" and i == 0: # TODO: need to see if i == 0 is the only case for this
+                    if name == "generationagent" and i == 0: # TODO: need to see if i == 0 is the only case for this
                         agent_template_values = self._determine_agent_template_values(
                             orig_user_query, AGENT_DESCRIPTIONS[name], agent_template_var_instructions)
                         agent_template_values = {
@@ -195,7 +194,7 @@ Variables:
                     else:
                         agent_template_values = [AgentTemplateVarInstruction(
                             template_var_name="build_prompt_py_code",
-                            template_var_instruction=prev_agent.get_post_generation_agent_code()
+                            template_var_instruction=prev_agent.get_proceeding_agent_code()
                         )]
                 else:
                     agent_template_values = self._determine_agent_template_values(

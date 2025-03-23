@@ -1,4 +1,3 @@
-import chainlit as cl
 from openai import OpenAI
 import os
 from pydantic import RootModel, BaseModel

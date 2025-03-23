@@ -174,7 +174,7 @@ async def main(message):
         ai_response = orchestrator.determine_agents(message.content)
         print("DEBUG:", ai_response)
         agents = ai_response.agents
-        #agents = ["notionfetchagent", "scripturegenerationagent", "notificationagent"]
+        #agents = ["notionfetchagent", "generationagent", "notificationagent"]
 
         await cl.Message(content=f"Going to use these agents: {agents}").send()
 

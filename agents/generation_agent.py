@@ -3,7 +3,7 @@ from agents.base_agent import BaseAgent
 from typing import List
 from schemas.orchestrator_schema import AgentTemplateVarInstruction
 
-class ScriptureGenerationAgent(BaseAgent):
+class GenerationAgent(BaseAgent):
 
     template_var_instructions = {
         "instructions": """This should be instructions to the first agent, which does a basic generation query.
@@ -27,7 +27,7 @@ Some examples:
 
     @property
     def description(self) -> str:
-        return "Generates Bible scripture based on provided insights and growth goals."
+        return "Vanilla generation agent ."
 
     def get_graph_node_code(self):
         code = """
@@ -37,7 +37,7 @@ generation_agent_prompt_template = PromptTemplate(
     template="You are a generalist assistant reponsible for performing a simple query. The instructions are: {instructions}"
 )
 generation_agent_llm_chain = LLMChain(llm=llm, prompt=generation_agent_prompt_template)
-def scripturegenerationagent(state: State) -> State:
+def generationagent(state: State) -> State:
     # e.g. for build_prompt_py_code:
     # notion_journal_growth_summary = state.get("notion_journal_growth_summary")
     # notion_next_node_instructions = state.get("notion_next_node_instructions") + notion_journal_growth_summary

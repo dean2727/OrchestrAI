@@ -91,7 +91,7 @@ def notionfetchagent(state: State) -> State:
     # TODO: this also depends on what tools are used/what function this agent would 
     # serve in the job. This needs to be dynamically determined somehow (perhaps 
     # with if-else is easiest)
-    def get_post_generation_agent_code(self):
+    def get_proceeding_agent_code(self):
         if "fetch_latest_notion_journaling_entry" in self.tools_to_use:
             build_prompt_py_code = """
     notion_journal_growth_summary = state.get("notion_journal_growth_summary")

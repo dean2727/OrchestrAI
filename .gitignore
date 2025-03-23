@@ -3,3 +3,5 @@ __pycache__/
 .chainlit/
 test.py
 x.py
+*.code-workspace
+s3_storage/*
