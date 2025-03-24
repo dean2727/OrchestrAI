@@ -14,7 +14,7 @@ Some examples:
         "build_prompt_py_code": "Just give back a random word."
     }
 
-    state_vars_set = {"message": str}
+    state_vars_set = {"generation_message": str}
 
     # for now, this isnt needed, since we're just assuming instructions are applied 
     # if and only if this type of agent is first in the AI job chain
@@ -31,20 +31,25 @@ Some examples:
 
     def get_graph_node_code(self):
         code = """
+# Initialize the ChatOpenAI model
 llm = ChatOpenAI(model="gpt-4o")
-generation_agent_prompt_template = PromptTemplate(
+
+# Create a prompt template
+generation_agent_prompt = PromptTemplate(
     input_variables=["instructions"],
     template="You are a generalist assistant reponsible for performing a simple query. The instructions are: {instructions}"
 )
-generation_agent_llm_chain = LLMChain(llm=llm, prompt=generation_agent_prompt_template)
-def generationagent(state: State) -> State:
-    # e.g. for build_prompt_py_code:
-    # notion_journal_growth_summary = state.get("notion_journal_growth_summary")
-    # notion_next_node_instructions = state.get("notion_next_node_instructions") + notion_journal_growth_summary
-    # prompt = generation_agent_prompt_template.format(instructions=notion_next_node_instructions)
-    {build_prompt_py_code}
-    output = generation_agent_llm_chain.run(prompt)
 
-    return {"message": output}
+# Create the chain using the runnables API (prompt | llm | parser)
+generation_agent_chain = generation_agent_prompt | llm | StrOutputParser()
+
+def generationagent(state: State) -> State:
+    # Get necessary context from state
+    {build_prompt_py_code}
+    
+    # Invoke generation with the chain
+    response = generation_agent_chain.invoke({"instructions": prompt})
+
+    return {"generation_message": response}
         """
         return code

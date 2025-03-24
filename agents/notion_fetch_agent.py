@@ -95,8 +95,7 @@ def notionfetchagent(state: State) -> State:
         if "fetch_latest_notion_journaling_entry" in self.tools_to_use:
             build_prompt_py_code = """
     notion_journal_growth_summary = state.get("notion_journal_growth_summary")
-    notion_next_node_instructions = state.get("notion_next_node_instructions") + notion_journal_growth_summary
-    prompt = generation_agent_prompt_template.format(instructions=notion_next_node_instructions)
+    prompt = state.get("notion_next_node_instructions") + notion_journal_growth_summary
             """
         else:
             build_prompt_py_code = "..."

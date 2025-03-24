@@ -48,3 +48,13 @@ class BaseAgent(ABC):
         pertaining to this agent, to be injected into AI job (jinja) template
         """
         pass
+
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(\n"
+            f"  description={self.description},\n"
+            f"  state_vars_set={self.state_vars_set},\n"
+            f"  node_code={self.get_graph_node_code()},\n"
+            f"  ai_generated_template_vars={self.ai_generated_template_vars}\n"
+            f")"
+        )

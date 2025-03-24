@@ -13,7 +13,7 @@ Some examples:
         "build_prompt_py_code": "notion_journal_growth_summary = state.get(\"notion_journal_growth_summary\")\nnotion_next_node_instructions = state.get(\"notion_next_node_instructions\") + notion_journal_growth_summary\nprompt = notion_next_node_instructions"
     }
 
-    state_vars_set = {"message": str}
+    state_vars_set = {"reasoning_message": str}
 
     # for now, this isnt needed, since we're just assuming instructions are applied 
     # if and only if this type of agent is first in the AI job chain
@@ -30,10 +30,6 @@ Some examples:
 
     def get_graph_node_code(self):
         code = """
-from langchain_deepseek import ChatDeepSeek
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-
 # Initialize the ChatDeepSeek model
 llm = ChatDeepSeek(
     model="deepseek-reasoner",
@@ -56,13 +52,13 @@ You are an agent with reasoning capabilities, responsible for the following:
 # Create the chain using the runnables API (prompt | llm | parser)
 reasoning_chain = reasoning_prompt | llm | StrOutputParser()
 
-def reasoninggenerationagent(state: State) -> State:
+def reasoningagent(state: State) -> State:
     # Get necessary context from state
     {build_prompt_py_code}
     
     # Invoke reasoning with DeepSeek
     response = reasoning_chain.invoke({"instructions": prompt})
 
-    return {"message": response}
+    return {"reasoning_message": response}
         """
         return code

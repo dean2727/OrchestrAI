@@ -9,13 +9,14 @@ from typing import List, Any, Dict
 
 # String template (langgraph python script) which each AI cronjob will be based off of
 workflow_template = """
-from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
 from typing import TypedDict
 import os
+from langchain_openai import ChatOpenAI
+from langchain.prompts import PromptTemplate
 from langgraph.graph import START, END, StateGraph
 from langchain.agents import initialize_agent
+from langchain_deepseek import ChatDeepSeek
+from langchain_core.output_parsers import StrOutputParser
 
 {{ STATE }}
 
@@ -185,17 +186,23 @@ Variables:
                 # this agent is in the "vanilla generation" category? Or, do we 
                 # want to just have some high level 4o agent?
                 if "build_prompt_py_code" in agent_template_var_instructions:
-                    if name == "generationagent" and i == 0: # TODO: need to see if i == 0 is the only case for this
-                        agent_template_values = self._determine_agent_template_values(
-                            orig_user_query, AGENT_DESCRIPTIONS[name], agent_template_var_instructions)
-                        agent_template_values = {
-                            "build_prompt_py_code": f"prompt = generation_agent_prompt_template.format(instructions={agent_template_values['instructions']})"
-                        }
-                    else:
-                        agent_template_values = [AgentTemplateVarInstruction(
-                            template_var_name="build_prompt_py_code",
-                            template_var_instruction=prev_agent.get_proceeding_agent_code()
-                        )]
+                    if name in ["generationagent", "reasoningagent"]:
+                        # Preceding agent provides instructions to this agent on how to format the prompt?
+                        if prev_agent and hasattr(prev_agent, "get_proceeding_agent_code"):
+                            prompt_creation_code = prev_agent.get_proceeding_agent_code()
+                            agent_template_values = [AgentTemplateVarInstruction(
+                                template_var_name="build_prompt_py_code",
+                                template_var_instruction=prompt_creation_code
+                            )]
+                        # Otherwise, simply determine instructions for the prompt, using LLM
+                        else:
+                            agent_template_values = self._determine_agent_template_values(
+                                orig_user_query, AGENT_DESCRIPTIONS[name], agent_template_var_instructions)
+                            instructions = next(x.template_var_instruction for x in agent_template_values if x.template_var_name == 'instructions')
+                            agent_template_values = [AgentTemplateVarInstruction(
+                                template_var_name="build_prompt_py_code",
+                                template_var_instruction=f"prompt = \"{instructions}\""
+                            )]
                 else:
                     agent_template_values = self._determine_agent_template_values(
                         orig_user_query, AGENT_DESCRIPTIONS[name], agent_template_var_instructions)
