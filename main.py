@@ -6,6 +6,10 @@ from chainlit.input_widget import Select, TextInput
 from datetime import datetime
 import os
 import re
+import tempfile
+from google.cloud import storage
+from google.api_core.exceptions import NotFound, Forbidden
+import subprocess
 
 config.load_kube_config()
 
@@ -40,8 +44,10 @@ orchestrator = Orchestrator()
 # cronjob vars
 home_abs_path = os.path.abspath('.')
 tools_path = f"{home_abs_path}/tools/"
-image = "dean27/orchestrai:latest"
-namespace = "default"
+# image = "dean27/orchestrai:latest"
+# namespace = "default"
+gcs_bucket_name = "all-ai-jobs"
+gc_region = "us-central1"
 
 @cl.on_chat_start
 async def on_chat_start():
@@ -149,30 +155,14 @@ async def main(message):
     }
 
     cron_schedule = frequency_map.get(frequency)
-
-    # TODO: get dynamically
-    username = "dean"
-    s3_path = f"s3_storage/{username}/"
-
-    # Check path, increment
-    pattern = r"job(\d+)\.py"
-    s3_path_files = os.listdir(s3_path)
-    job_numbers = [int(match.group(1)) for f in s3_path_files if (match := re.match(pattern, f))]
-    new_number = max(job_numbers, default=0) + 1
-    job_file_name = f"job{new_number}.py"
-    template_save_path = f"{home_abs_path}/{s3_path}/{job_file_name}"
-    job_id = f"job-{new_number}-{username}"
-
-    async def local_job_function():
-        result = f"Processed query: '{message.content}' with frequency: {frequency}"
-        await cl.Message(content=result).send()
+        
 
     if "query" not in job_config and cron_schedule:
         job_config["query"] = message.content.strip()
 
         # Determine the agents
         ai_response = orchestrator.determine_agents(message.content)
-        print("DEBUG:", ai_response)
+        #print("DEBUG:", ai_response)
         agents = ai_response.agents
         #agents = ["notionfetchagent", "generationagent", "notificationagent"]
 
@@ -181,61 +171,125 @@ async def main(message):
         # Initialize agents (determine template vars)
         agents = orchestrator.initialize_agents(message.content, agents)
         # Render the workflow (python file)
-        orchestrator.build_and_render_ai_job_workflow(agents, output_file_path=template_save_path)
+        rendered_template = orchestrator.build_and_render_ai_job_workflow(agents)
 
-        cronjob_manifest = {
-            "apiVersion": "batch/v1",
-            "kind": "CronJob",
-            "metadata": {
-                "name": f"{job_id}",
-                "namespace": f"{namespace}"
-            },
-            "spec": {
-                "schedule": f"{cron_schedule}",
-                "concurrencyPolicy": "Forbid",
-                "successfulJobsHistoryLimit": 1,
-                "failedJobsHistoryLimit": 1,
-                "jobTemplate": {
-                    "spec": {
-                        "template": {
-                            "spec": {
-                                "containers": [
-                                    {
-                                        "name": f"{username}-{job_file_name[:-3]}",
-                                        "image": f"{image}",
-                                        "command": ["python", "graph.py"],
-                                        "env": [
-                                            {"name": "NOTION_DB_ID", "value": notion_db_id },
-                                            {"name": "NOTION_BEARER_TOKEN", "value": os.environ["NOTION_BEARER_TOKEN"]},
-                                            {"name": "OPENAI_API_KEY", "value": os.environ["OPENAI_API_KEY"]},
-                                            {"name": "USER_PHONE_NUMBER", "value": phone_number},
-                                            {"name": "USER_EMAIL", "value": email},
-                                        ],
-                                        "volumeMounts": [
-                                            {
-                                                "name": "ai-job-template",
-                                                "mountPath": "/scripts/graph.py"
-                                            }
-                                        ]
-                                    }
-                                ],
-                                "restartPolicy": "OnFailure",
-                                "volumes": [
-                                    {
-                                        "name": "ai-job-template",
-                                        "hostPath": {
-                                            "path": f"{template_save_path}",
-                                            "type": "File"
-                                        }
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        # cronjob_manifest = {
+        #     "apiVersion": "batch/v1",
+        #     "kind": "CronJob",
+        #     "metadata": {
+        #         "name": f"{job_id}",
+        #         "namespace": f"{namespace}"
+        #     },
+        #     "spec": {
+        #         "schedule": f"{cron_schedule}",
+        #         "concurrencyPolicy": "Forbid",
+        #         "successfulJobsHistoryLimit": 1,
+        #         "failedJobsHistoryLimit": 1,
+        #         "jobTemplate": {
+        #             "spec": {
+        #                 "template": {
+        #                     "spec": {
+        #                         "containers": [
+        #                             {
+        #                                 "name": f"{username}-{job_file_name[:-3]}",
+        #                                 "image": f"{image}",
+        #                                 "command": ["python", "graph.py"],
+        #                                 "env": [
+        #                                     {"name": "NOTION_DB_ID", "value": notion_db_id },
+        #                                     {"name": "NOTION_BEARER_TOKEN", "value": os.environ["NOTION_BEARER_TOKEN"]},
+        #                                     {"name": "OPENAI_API_KEY", "value": os.environ["OPENAI_API_KEY"]},
+        #                                     {"name": "USER_PHONE_NUMBER", "value": phone_number},
+        #                                     {"name": "USER_EMAIL", "value": email},
+        #                                 ],
+        #                                 "volumeMounts": [
+        #                                     {
+        #                                         "name": "ai-job-template",
+        #                                         "mountPath": "/scripts/graph.py"
+        #                                     }
+        #                                 ]
+        #                             }
+        #                         ],
+        #                         "restartPolicy": "OnFailure",
+        #                         "volumes": [
+        #                             {
+        #                                 "name": "ai-job-template",
+        #                                 "hostPath": {
+        #                                     "path": f"{template_save_path}",
+        #                                     "type": "File"
+        #                                 }
+        #                             }
+        #                         ]
+        #                     }
+        #                 }
+        #             }
+        #         }
+        #     }
+        # }
 
-        orchestrator.submit_cronjob(namespace, cronjob_manifest)
+        # orchestrator.submit_cronjob(namespace, cronjob_manifest)
 
-        await local_job_function()
+        # Upload script to Google Cloud Storage, from temporary local storage
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Ask AI what 2 words describe the job
+            ai_description = "Generate a script to describe the job"
+            ai_response = OpenAI.generate_text(ai_description)
+            job_description = ai_response.split()[:2]  # Extract the first two words from the response
+            job_name = f"job-{job_description}"
+            file_name = f"{job_name}.py"
+            file_path = os.path.join(temp_dir, file_name)
+
+            # Write the file to the temp path
+            with open(file_path, 'w') as file:
+                file.write("print('Hello, World!')")
+                #file.write(rendered_template)
+    
+            # Upload script to Google Cloud Storage
+            try:
+                # Initialize GCS client
+                client = storage.Client(project="orchestrai-456719")
+                bucket = client.bucket(gcs_bucket_name)
+                
+                # Verify bucket exists
+                bucket_exists = bucket.exists()
+                if not bucket_exists:
+                    raise ValueError(f"Bucket {gcs_bucket_name} does not exist")
+
+                # Upload the script
+                blob = bucket.blob(file_name)
+                blob.upload_from_filename(file_path)
+                print(f"Uploaded {file_path} to gs://{file_name}")
+            except (NotFound, Forbidden, ValueError) as e:
+                print(f"Failed to upload script to GCS: {str(e)}")
+            except Exception as e:
+                print(f"Unexpected error during GCS upload: {str(e)}")
+
+        # Deploy the job to google cloud run
+        project_id = os.environ["GC_PROJECT_ID"]
+        deploy_cmd = [
+            "gcloud", "run", "jobs", "deploy", job_name,
+            "--source", ".",
+            "--command", "bash",
+            "--args", "-c",
+            "--args", f"gsutil cp gs://{gcs_bucket_name}/{job_name}.py /app/scripts/ && python scripts/{job_name}.py",
+            "--region", gc_region,
+            "--project", project_id,
+            "--set-env-vars", f"MESSAGE={message.content},FREQUENCY={frequency}",
+            "--quiet"
+        ]
+        subprocess.run(deploy_cmd, check=True, capture_output=True, text=True)
+
+        # Create Cloud Scheduler job
+        schedule_cmd = [
+            "gcloud", "scheduler", "jobs", "create", "http", f"schedule-{job_name}",
+            "--schedule", cron_schedule,
+            "--uri", f"https://run.googleapis.com/v1/projects/{project_id}/locations/{gc_region}/jobs/{job_name}:run",
+            "--http-method", "POST",
+            "--oidc-service-account-email", f"cloud-run-invoker@{project_id}.iam.gserviceaccount.com",
+            "--location", gc_region,
+            "--project", project_id,
+            "--quiet"
+        ]
+        subprocess.run(schedule_cmd, check=True, capture_output=True, text=True)
+
+        result = f"Processed query: '{message.content}' with frequency: {frequency}"
+        await cl.Message(content=result).send()

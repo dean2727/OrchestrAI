@@ -9,59 +9,6 @@ import dotenv
 
 dotenv.load_dotenv()
 
-async def execute_tool(tool, args):
-    """Execute a single tool and handle cleanup."""
-    try:
-        result = await tool.run_async(args=args, tool_context=None)
-        return (True, result, None)  # Success, result, no error
-    except Exception as e:
-        return (False, None, str(e))  # Failed, no result, error message
-
-def create_mcp_tool_executor(command, args=None, env=None):
-    """Create a function that connects to an MCP server and executes tools."""
-    async def mcp_tool_executor(**kwargs):
-        tools, exit_stack = await MCPToolset.from_server(
-            connection_params=StdioServerParameters(
-                command=command,
-                args=args or [],
-                env=env or {},
-            )
-        )
-
-        names = [x.name for x in tools]
-        print("DEBUG:", names)
-
-        youtube = tools[0]
-
-        try:
-            result = await youtube.run_async(args=args, tool_context=None)
-            return result
-        except Exception as e:
-            return None # Failed, no result, error message
-        
-    return mcp_tool_executor
-
-# Step 5: Create YouTube search function
-search_youtube = create_mcp_tool_executor(
-    command="mcp-youtube-search",
-    args=[],
-    env={"SERP_API_KEY": os.getenv("SERP_API_KEY")}
-)
-
-# Step 6: Add documentation for the LLM
-search_youtube.__name__ = "search_youtube"
-search_youtube.__doc__ = """
-Search for YouTube videos based on a search query.
-    
-Args:
-    search_query: The search terms to look for on YouTube (e.g., 'Google Cloud Next 25')
-    max_results: Optional. Maximum number of results to return (default: 10)
-
-Returns:
-    List of YouTube videos with details including title, channel, link, published date, 
-    duration, views, thumbnail URL, and description.
-"""
-
 async def search_youtube_videos(search_query: str, max_results: int):
     """
     Search for YouTube videos based on a search query.

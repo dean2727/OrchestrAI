@@ -216,7 +216,7 @@ Variables:
 
         return agents
 
-    def build_and_render_ai_job_workflow(self, agents: List[BaseAgent], output_file_path: str):
+    def build_and_render_ai_job_workflow(self, agents: List[BaseAgent]):
         """
         Builds the AI job workflow for the cronjob, referencing the instantiated list 
         of agents (in the order they will be executed). Reference things like the 
@@ -265,8 +265,8 @@ Variables:
             EDGES=edges,
             INITIAL_STATE=initial_state
         )
-        with open(output_file_path, "w") as f:
-            f.write(rendered_script)
+
+        return rendered_script
 
     def submit_cronjob(self, namespace: str, cronjob_manifest: Dict[str, Any]):
         batch_v1 = client.BatchV1Api()

@@ -1,6 +1,7 @@
 chainlit
 twilio
 kubernetes
+google-adk
 openai
 langchain
 langchain-openai
@@ -8,3 +9,7 @@ langchain-community
 langchain-deepseek
 langgraph
 notion-client
+fixa-dev
+google-cloud-storage
+mcp-youtube-search
+litellm
